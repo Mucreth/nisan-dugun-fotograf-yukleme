@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const successMessage = document.getElementById('success-message');
     const uploadMoreBtn = document.getElementById('upload-more-btn');
     const fileListContainer = document.getElementById('file-list');
+    const startUploadBtn = document.getElementById('start-upload-btn');
     
     // Dosya seçme alanına tıklanınca input'u aktif et
     uploadContainer.addEventListener('click', function() {
@@ -18,12 +19,12 @@ document.addEventListener('DOMContentLoaded', function() {
             showSelectedFiles(fileInput.files);
             
             // Yükleme butonunu göster
-            document.getElementById('start-upload-btn').style.display = 'block';
+            startUploadBtn.style.display = 'block';
         }
     });
     
     // Yükleme başlatma butonu için event listener
-    document.getElementById('start-upload-btn').addEventListener('click', function() {
+    startUploadBtn.addEventListener('click', function() {
         if (fileInput.files.length > 0) {
             uploadFiles(fileInput.files);
             // Yükleme butonu gizle
@@ -67,10 +68,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="video-icon">▶</span>
                 </div>`;
             } else {
-                // Diğer dosya türleri için
-                thumbnailHTML = `<div class="file-thumbnail other">
-                    <span class="file-icon">📄</span>
-                </div>`;
+                // Diğer dosya türleri için (iPhone'dan gelen HEIC gibi)
+                const fileExt = file.name.split('.').pop().toLowerCase();
+                if (fileExt === 'heic') {
+                    thumbnailHTML = `<div class="file-thumbnail image">
+                        <span class="file-icon">🖼️</span>
+                    </div>`;
+                } else {
+                    thumbnailHTML = `<div class="file-thumbnail other">
+                        <span class="file-icon">📄</span>
+                    </div>`;
+                }
             }
             
             // Dosya bilgileri ve ilerleme çubuğu
@@ -128,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             fileListContainer.innerHTML = '';
             fileListContainer.style.display = 'none';
-            document.getElementById('start-upload-btn').style.display = 'none';
+            startUploadBtn.style.display = 'none';
         }
     }
     
@@ -178,30 +186,63 @@ document.addEventListener('DOMContentLoaded', function() {
         // Yükleme tamamlandığında
         xhr.addEventListener('load', function() {
             if (xhr.status >= 200 && xhr.status < 300) {
-                // Başarılı yanıt
-                progressFill.style.width = '100%';
-                progressText.textContent = 'Tamamlandı';
-                fileItem.classList.add('uploaded');
-                
-                // Tüm dosyalar yüklendi mi kontrol et
-                checkAllUploadsComplete();
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    
+                    // Sunucudan gelen cevabı kontrol et (başarılı mı?)
+                    const fileResponse = response[0]; // İlk öğe (tek dosya yüklüyoruz)
+                    
+                    if (fileResponse && fileResponse.status === 'success') {
+                        // Başarılı yanıt
+                        progressFill.style.width = '100%';
+                        progressText.textContent = 'Tamamlandı';
+                        fileItem.classList.add('uploaded');
+                    } else {
+                        // Sunucu hatası
+                        progressFill.style.width = '100%';
+                        progressFill.style.backgroundColor = '#dc3545';
+                        progressText.textContent = fileResponse ? fileResponse.message : 'Yükleme hatası';
+                        fileItem.classList.add('error');
+                    }
+                } catch (error) {
+                    // JSON parse hatası
+                    progressFill.style.width = '100%';
+                    progressFill.style.backgroundColor = '#dc3545';
+                    progressText.textContent = 'Sunucu yanıtı anlaşılamadı';
+                    fileItem.classList.add('error');
+                }
             } else {
-                // Sunucu hatası
-                progressText.textContent = 'Hata: ' + xhr.status;
+                // HTTP hatası
+                progressFill.style.width = '100%';
+                progressFill.style.backgroundColor = '#dc3545';
+                progressText.textContent = 'Sunucu hatası: ' + xhr.status;
                 fileItem.classList.add('error');
             }
+            
+            // Tüm dosyalar yüklendi mi kontrol et
+            checkAllUploadsComplete();
         });
         
         // Bağlantı hatası
         xhr.addEventListener('error', function() {
+            progressFill.style.width = '100%';
+            progressFill.style.backgroundColor = '#dc3545';
             progressText.textContent = 'Bağlantı hatası';
             fileItem.classList.add('error');
+            
+            // Tüm dosyalar yüklendi mi kontrol et
+            checkAllUploadsComplete();
         });
         
         // İstek timeout
         xhr.addEventListener('timeout', function() {
+            progressFill.style.width = '100%';
+            progressFill.style.backgroundColor = '#dc3545';
             progressText.textContent = 'Zaman aşımı';
             fileItem.classList.add('error');
+            
+            // Tüm dosyalar yüklendi mi kontrol et
+            checkAllUploadsComplete();
         });
         
         // İsteği gönder
@@ -212,13 +253,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // Tüm dosyaların yüklenip yüklenmediğini kontrol et
     function checkAllUploadsComplete() {
         const totalItems = document.querySelectorAll('.file-item').length;
-        const uploadedItems = document.querySelectorAll('.file-item.uploaded').length;
-        const errorItems = document.querySelectorAll('.file-item.error').length;
+        const completedItems = document.querySelectorAll('.file-item.uploaded, .file-item.error').length;
         
-        // Tüm dosyalar yüklendiyse veya hata aldıysa
-        if (uploadedItems + errorItems === totalItems) {
+        // Tüm dosyalar yüklendiyse (başarılı veya hatalı)
+        if (completedItems >= totalItems) {
             // Başarı mesajını göster
             successMessage.style.display = 'block';
+            
+            // Başarılı ve hatalı dosya sayılarını al
+            const successCount = document.querySelectorAll('.file-item.uploaded').length;
+            const errorCount = document.querySelectorAll('.file-item.error').length;
+            
+            // Başarı mesajını güncelle
+            const successText = document.querySelector('#success-message p');
+            
+            if (errorCount === 0) {
+                successText.textContent = `Tüm dosyalar başarıyla yüklendi! Paylaşımınız için teşekkür ederiz.`;
+            } else if (successCount === 0) {
+                successText.textContent = `Hiçbir dosya yüklenemedi. Lütfen tekrar deneyin.`;
+                successMessage.style.backgroundColor = '#f8d7da';
+                successMessage.style.borderColor = '#f5c6cb';
+                successMessage.style.color = '#721c24';
+            } else {
+                successText.textContent = `${successCount} dosya başarıyla yüklendi, ${errorCount} dosya yüklenemedi. Paylaşımınız için teşekkür ederiz.`;
+                successMessage.style.backgroundColor = '#fff3cd';
+                successMessage.style.borderColor = '#ffeeba';
+                successMessage.style.color = '#856404';
+            }
         }
     }
     
@@ -227,7 +288,12 @@ document.addEventListener('DOMContentLoaded', function() {
         fileListContainer.innerHTML = '';
         fileListContainer.style.display = 'none';
         uploadContainer.style.display = 'block';
-        document.getElementById('start-upload-btn').style.display = 'none';
+        startUploadBtn.style.display = 'none';
+        
+        // Başarı mesajını varsayılan hale getir
+        successMessage.style.backgroundColor = '#dff0d8';
+        successMessage.style.borderColor = '#d6e9c6';
+        successMessage.style.color = '#3c763d';
         
         // Dosya input'unu temizle
         fileInput.value = '';
@@ -285,177 +351,4 @@ document.addEventListener('DOMContentLoaded', function() {
             fileInput.dispatchEvent(event);
         }
     }
-});
-
-// CSS için ekleme yapalım
-document.addEventListener('DOMContentLoaded', function() {
-    // Sürükle-bırak için highlight stilini CSS'e ekle
-    const style = document.createElement('style');
-    style.textContent = `
-        .highlight {
-            border: 2px dashed #4CAF50;
-            background-color: rgba(76, 175, 80, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .error-message {
-            margin: 30px auto;
-            padding: 20px;
-            background-color: #f8d7da;
-            border-radius: 5px;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-        
-        #file-list {
-            margin: 20px 0;
-            display: none;
-        }
-        
-        .file-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-        }
-        
-        .file-item.uploaded {
-            border-color: #4CAF50;
-            background-color: rgba(76, 175, 80, 0.1);
-        }
-        
-        .file-item.error {
-            border-color: #dc3545;
-            background-color: rgba(220, 53, 69, 0.1);
-        }
-        
-        .file-thumbnail {
-            width: 60px;
-            height: 60px;
-            margin-right: 15px;
-            border-radius: 5px;
-            overflow: hidden;
-            background-color: #e0e0e0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .file-thumbnail img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .file-thumbnail.video {
-            background-color: #333;
-            color: white;
-        }
-        
-        .video-icon {
-            font-size: 24px;
-        }
-        
-        .file-icon {
-            font-size: 24px;
-        }
-        
-        .file-info {
-            flex: 1;
-        }
-        
-        .file-name {
-            font-weight: bold;
-            margin-bottom: 3px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 200px;
-        }
-        
-        .file-size {
-            font-size: 12px;
-            color: #777;
-            margin-bottom: 5px;
-        }
-        
-        .file-progress {
-            width: 100%;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            background-color: #e0e0e0;
-            border-radius: 3px;
-            overflow: hidden;
-            height: 10px;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
-        .progress-text {
-            font-size: 12px;
-            color: #555;
-            margin-top: 3px;
-        }
-        
-        .file-actions {
-            margin-left: 10px;
-        }
-        
-        .remove-file-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 0;
-            color: #777;
-        }
-        
-        .remove-file-btn:hover {
-            color: #dc3545;
-        }
-        
-        #start-upload-btn {
-            display: none;
-            margin: 20px auto;
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-        }
-        
-        #start-upload-btn:hover {
-            background-color: #45a049;
-        }
-        
-        #try-again-btn {
-            margin-top: 15px;
-            padding: 10px 20px;
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-        }
-        
-        #try-again-btn:hover {
-            background-color: #c82333;
-        }
-    `;
-    document.head.appendChild(style);
 });
