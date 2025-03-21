@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Düğün & Nişan Anıları</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Düğün & Nişan Anıları</h1>
+        <p>Sevgili misafirimiz, özel günümüze ait fotoğraf ve videolarınızı bizimle paylaşmak için aşağıdaki butona tıklayabilirsiniz.</p>
+        
+        <div class="upload-container">
+            <p class="upload-text">Foto/Video yüklemek için tıklayınız</p>
+            <label for="file-upload" class="custom-upload-btn">
+                <div class="plus-icon">+</div>
+            </label>
+            <input type="file" id="file-upload" multiple accept="image/*,video/*" style="display: none;">
+        </div>
+        
+        <div id="upload-progress" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+            <p id="progress-text">Yükleniyor... 0%</p>
+        </div>
+        
+        <div id="success-message" style="display: none;">
+            <p>Yükleme tamamlandı! Paylaşımınız için teşekkür ederiz.</p>
+            <button id="upload-more-btn">Daha Fazla Yükle</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
