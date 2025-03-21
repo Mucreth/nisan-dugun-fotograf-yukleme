@@ -34,59 +34,79 @@ document.addEventListener('DOMContentLoaded', function() {
         uploadContainer.style.display = 'none';
         progressContainer.style.display = 'block';
         
-        // Gerçek bir yükleme API'si kullanılmalı
-        // Şimdilik simüle edelim
-        simulateUpload(files);
-    }
-    
-    function simulateUpload(files) {
-        let totalFiles = files.length;
-        let uploadedFiles = 0;
-        let progress = 0;
-        
-        const interval = setInterval(function() {
-            // Her dosya için ortalama yükleme simülasyonu
-            if (uploadedFiles < totalFiles) {
-                progress += (100 / totalFiles) / 10; // Her dosya için 10 adımda tamamlanır
-                
-                if (progress >= (uploadedFiles + 1) * (100 / totalFiles)) {
-                    uploadedFiles++;
-                }
-                
-                updateProgress(Math.min(progress, 100));
-                
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    uploadComplete();
-                }
-            }
-        }, 200);
-        
-        // Gerçek bir yükleme API'si için:
-        // Örnek: FormData kullanarak dosyaları sunucuya gönderme
-        /*
+        // FormData oluştur
         const formData = new FormData();
         
+        // Dosyaları FormData'ya ekle
         for (let i = 0; i < files.length; i++) {
             formData.append('files[]', files[i]);
         }
         
+        // XHR ile dosyaları yükle (progress takibi için)
+        const xhr = new XMLHttpRequest();
+        
+        // Progress olayı
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                updateProgress(percentComplete);
+            }
+        });
+        
+        // Yükleme tamamlandığında
+        xhr.addEventListener('load', function() {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                // Başarılı yanıt
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    console.log('Yükleme başarılı:', response);
+                    uploadComplete();
+                } catch (error) {
+                    console.error('JSON parse hatası:', error);
+                    handleUploadError('Sunucu yanıtı anlaşılamadı.');
+                }
+            } else {
+                // Sunucu hatası
+                console.error('Sunucu hatası:', xhr.status, xhr.responseText);
+                handleUploadError('Sunucu hatası: ' + xhr.status);
+            }
+        });
+        
+        // Bağlantı hatası
+        xhr.addEventListener('error', function() {
+            console.error('Bağlantı hatası');
+            handleUploadError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.');
+        });
+        
+        // İstek timeout
+        xhr.addEventListener('timeout', function() {
+            console.error('Zaman aşımı');
+            handleUploadError('İstek zaman aşımına uğradı. Lütfen daha sonra tekrar deneyin.');
+        });
+        
+        // İsteği gönder
+        xhr.open('POST', 'upload.php');
+        xhr.send(formData);
+        
+        // Alternatif olarak fetch API ile (progress takibi olmadan):
+        /*
         fetch('upload.php', {
             method: 'POST',
-            body: formData,
-            onUploadProgress: function(progressEvent) {
-                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                updateProgress(percentCompleted);
-            }
+            body: formData
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Sunucu hatası: ' + response.status);
+            }
+            return response.json();
+        })
         .then(data => {
-            console.log('Success:', data);
+            console.log('Yükleme başarılı:', data);
             uploadComplete();
         })
         .catch(error => {
-            console.error('Error:', error);
-            // Hata durumunda kullanıcıya bilgi ver
+            console.error('Yükleme hatası:', error);
+            handleUploadError(error.message);
         });
         */
     }
@@ -99,6 +119,30 @@ document.addEventListener('DOMContentLoaded', function() {
     function uploadComplete() {
         progressContainer.style.display = 'none';
         successMessage.style.display = 'block';
+        
+        // Dosya input'unu temizle
+        fileInput.value = '';
+    }
+    
+    function handleUploadError(errorMessage) {
+        progressContainer.style.display = 'none';
+        
+        // Hata mesajını göster
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `
+            <p>Yükleme sırasında bir hata oluştu: ${errorMessage}</p>
+            <button id="try-again-btn">Tekrar Dene</button>
+        `;
+        
+        // Hata mesajını sayfaya ekle
+        document.querySelector('.container').appendChild(errorDiv);
+        
+        // Tekrar deneme butonu
+        document.getElementById('try-again-btn').addEventListener('click', function() {
+            errorDiv.remove();
+            resetUploadUI();
+        });
         
         // Dosya input'unu temizle
         fileInput.value = '';
@@ -147,15 +191,59 @@ document.addEventListener('DOMContentLoaded', function() {
         const dt = e.dataTransfer;
         const files = dt.files;
         
-        const fileInput = document.getElementById('file-upload');
-        
-        // Dosyaları input'a aktar
+        // Dosyalar varsa
         if (files.length > 0) {
-            fileInput.files = files;
+            const fileInput = document.getElementById('file-upload');
             
-            // Change event'ini manuel tetikle
-            const event = new Event('change');
-            fileInput.dispatchEvent(event);
+            // FileList doğrudan atanabilir değil, bu yüzden manuel işlem yapmalıyız
+            // Dosyaları input'a aktar demek yerine doğrudan yükleme fonksiyonunu çağıralım
+            document.querySelector('.upload-container').click();
+            
+            // Biraz gecikmeyle dosyaları seç (click işleminin tamamlanması için)
+            setTimeout(() => {
+                const uploadEvent = new Event('change');
+                fileInput.files = files;
+                fileInput.dispatchEvent(uploadEvent);
+            }, 100);
         }
     }
+});
+
+// CSS için ekleme yapalım
+document.addEventListener('DOMContentLoaded', function() {
+    // Sürükle-bırak için highlight stilini CSS'e ekle
+    const style = document.createElement('style');
+    style.textContent = `
+        .highlight {
+            border: 2px dashed #4CAF50;
+            background-color: rgba(76, 175, 80, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .error-message {
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #f8d7da;
+            border-radius: 5px;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        #try-again-btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        
+        #try-again-btn:hover {
+            background-color: #c82333;
+        }
+    `;
+    document.head.appendChild(style);
 });
