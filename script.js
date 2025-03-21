@@ -7,10 +7,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileListContainer = document.getElementById('file-list');
     const startUploadBtn = document.getElementById('start-upload-btn');
     
+    // Mobil cihaz tespiti
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // iOS için ekstra kontroller
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
     // Dosya seçme alanına tıklanınca input'u aktif et
     uploadContainer.addEventListener('click', function() {
         fileInput.click();
     });
+    
+    // Dokunma olayları için dokunma geribildirimini optimize et
+    if (isMobile) {
+        document.querySelectorAll('button, .custom-upload-btn').forEach(el => {
+            el.addEventListener('touchstart', function() {
+                this.classList.add('touching');
+            }, { passive: true });
+            
+            el.addEventListener('touchend', function() {
+                this.classList.remove('touching');
+            }, { passive: true });
+        });
+    }
     
     // Dosya seçildiğinde
     fileInput.addEventListener('change', function(e) {
@@ -20,6 +39,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Yükleme butonunu göster
             startUploadBtn.style.display = 'block';
+            
+            // Mobil cihazlarda, yükleme butonuna odaklan
+            if (isMobile) {
+                // Önce seçilen dosyalara kaydır
+                setTimeout(function() {
+                    fileListContainer.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }
         }
     });
     
@@ -35,10 +62,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Yükleme tamamlandıktan sonra tekrar yükleme yapmak için
     uploadMoreBtn.addEventListener('click', function() {
         resetUploadUI();
-    });
-    
-    // Sayfa yenilendiğinde başa dön
-    window.addEventListener('beforeunload', function() {
+        
+        // Başa kaydır
         window.scrollTo(0, 0);
     });
     
@@ -57,6 +82,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Dosya türünü belirle ve thumbnail oluştur
             let thumbnailHTML = '';
+            
+            // Resim veya video dosyası kontrolü
             if (file.type.startsWith('image/')) {
                 // Resim dosyası için
                 thumbnailHTML = `<div class="file-thumbnail">
@@ -68,9 +95,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="video-icon">▶</span>
                 </div>`;
             } else {
-                // Diğer dosya türleri için (iPhone'dan gelen HEIC gibi)
+                // Dosya uzantısını kontrol et (özellikle iPhone HEIC dosyaları için)
                 const fileExt = file.name.split('.').pop().toLowerCase();
-                if (fileExt === 'heic') {
+                if (fileExt === 'heic' || fileExt === 'heif') {
                     thumbnailHTML = `<div class="file-thumbnail image">
                         <span class="file-icon">🖼️</span>
                     </div>`;
@@ -81,11 +108,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
+            // Dosya adını uygun şekilde kısalt
+            let fileName = file.name;
+            if (fileName.length > 25) {
+                const ext = fileName.split('.').pop();
+                const name = fileName.substring(0, fileName.length - ext.length - 1);
+                fileName = name.substring(0, 20) + '...' + ext;
+            }
+            
             // Dosya bilgileri ve ilerleme çubuğu
             fileItem.innerHTML = `
                 ${thumbnailHTML}
                 <div class="file-info">
-                    <div class="file-name">${file.name}</div>
+                    <div class="file-name" title="${file.name}">${fileName}</div>
                     <div class="file-size">${formatFileSize(file.size)}</div>
                     <div class="file-progress">
                         <div class="progress-bar">
@@ -114,29 +149,39 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Dosya listesinden bir dosyayı kaldır
     function removeFileFromList(index) {
-        // FileList doğrudan manipüle edilemez, yeni bir DataTransfer oluştur
-        const dt = new DataTransfer();
-        
-        // Seçili tüm dosyaları al
-        const files = fileInput.files;
-        
-        // Belirtilen index dışındaki tüm dosyaları yeni listeye ekle
-        for (let i = 0; i < files.length; i++) {
-            if (i !== index) {
-                dt.items.add(files[i]);
+        try {
+            // FileList doğrudan manipüle edilemez, yeni bir DataTransfer oluştur
+            const dt = new DataTransfer();
+            
+            // Seçili tüm dosyaları al
+            const files = fileInput.files;
+            
+            // Belirtilen index dışındaki tüm dosyaları yeni listeye ekle
+            for (let i = 0; i < files.length; i++) {
+                if (i !== index) {
+                    dt.items.add(files[i]);
+                }
             }
-        }
-        
-        // Yeni dosya listesini input'a ata
-        fileInput.files = dt.files;
-        
-        // Dosya listesini güncelle
-        if (fileInput.files.length > 0) {
-            showSelectedFiles(fileInput.files);
-        } else {
-            fileListContainer.innerHTML = '';
-            fileListContainer.style.display = 'none';
-            startUploadBtn.style.display = 'none';
+            
+            // Yeni dosya listesini input'a ata
+            fileInput.files = dt.files;
+            
+            // Dosya listesini güncelle
+            if (fileInput.files.length > 0) {
+                showSelectedFiles(fileInput.files);
+            } else {
+                fileListContainer.innerHTML = '';
+                fileListContainer.style.display = 'none';
+                startUploadBtn.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Dosya kaldırılırken hata oluştu:', error);
+            
+            // Safari ve bazı mobil tarayıcılar DataTransfer API'sini desteklemeyebilir
+            // Bu durumda kullanıcıya bir mesaj gösterelim
+            if (isIOS) {
+                alert('iPhone veya iPad\'de dosya kaldırma işlemi desteklenmiyor. Lütfen tüm dosyaları yükleyin veya sayfayı yenileyerek baştan başlayın.');
+            }
         }
     }
     
@@ -280,6 +325,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 successMessage.style.borderColor = '#ffeeba';
                 successMessage.style.color = '#856404';
             }
+            
+            // Sonuca doğru kaydır
+            setTimeout(function() {
+                successMessage.scrollIntoView({ behavior: 'smooth' });
+            }, 300);
         }
     }
     
@@ -303,52 +353,91 @@ document.addEventListener('DOMContentLoaded', function() {
 // Dosya sürükle-bırak desteği ekleyelim
 document.addEventListener('DOMContentLoaded', function() {
     const dropArea = document.querySelector('.container');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-    });
-    
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, highlight, false);
-    });
-    
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, unhighlight, false);
-    });
-    
-    function highlight() {
-        dropArea.classList.add('highlight');
-    }
-    
-    function unhighlight() {
-        dropArea.classList.remove('highlight');
-    }
-    
-    dropArea.addEventListener('drop', handleDrop, false);
-    
-    function handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
+    // Mobil cihazlarda sürükle-bırak genellikle çalışmaz, sadece masaüstü için etkinleştir
+    if (!isMobile) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
         
-        // Dosyalar varsa
-        if (files.length > 0) {
-            const fileInput = document.getElementById('file-upload');
-            
-            // DataTransfer API kullanarak dosyaları input'a aktar
-            const newDT = new DataTransfer();
-            for (let i = 0; i < files.length; i++) {
-                newDT.items.add(files[i]);
-            }
-            fileInput.files = newDT.files;
-            
-            // Change event'ini manuel tetikle
-            const event = new Event('change');
-            fileInput.dispatchEvent(event);
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.classList.add('highlight');
+        }
+        
+        function unhighlight() {
+            dropArea.classList.remove('highlight');
+        }
+        
+        dropArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            // Dosyalar varsa
+            if (files.length > 0) {
+                const fileInput = document.getElementById('file-upload');
+                
+                try {
+                    // DataTransfer API kullanarak dosyaları input'a aktar
+                    const newDT = new DataTransfer();
+                    for (let i = 0; i < files.length; i++) {
+                        newDT.items.add(files[i]);
+                    }
+                    fileInput.files = newDT.files;
+                    
+                    // Change event'ini manuel tetikle
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                } catch (error) {
+                    console.error('Dosya sürükle-bırak hatası:', error);
+                    alert('Dosya yükleme hatası oluştu. Lütfen dosya seçme butonunu kullanın.');
+                }
+            }
+        }
+    }
+    
+    // Mobil tarayıcılarda, ekran rotasyonu değiştiğinde düzeni iyileştir
+    if (isMobile) {
+        window.addEventListener('orientationchange', function() {
+            setTimeout(function() {
+                const successMessage = document.getElementById('success-message');
+                if (successMessage && successMessage.style.display !== 'none') {
+                    successMessage.scrollIntoView({ behavior: 'smooth' });
+                }
+            }, 500);
+        });
+    }
+    
+    // Dokunma geribildirimini CSS'e ekle (Mobil cihazlar için)
+    if (isMobile) {
+        const style = document.createElement('style');
+        style.textContent = `
+            .touching {
+                opacity: 0.8;
+                transform: scale(0.98);
+            }
+            
+            @media (max-width: 480px) {
+                input, button {
+                    font-size: 16px; /* iOS'ta zoom sorunu çözümü */
+                }
+            }
+        `;
+        document.head.appendChild(style);
     }
 });
